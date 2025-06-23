@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Comparison Tool</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        /* Custom styles for the image comparison slider to ensure it takes full width */
+        img-comparison-slider {
+            width: 100%;
+            height: auto; /* Allow height to adjust based on aspect ratio */
+            --divider-width: 3px;
+            --divider-color: #4f46e5; /* Indigo-600 */
+            --default-handle-opacity: 1;
+            --default-handle-color: #4f46e5; /* Indigo-600 */
+            border-radius: 0.75rem; /* rounded-xl */
+            overflow: hidden; /* Ensure rounded corners apply to content */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+        img-comparison-slider img {
+            display: block; /* Remove extra space below image */
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-2xl">
+        <h1 class="text-3xl font-bold text-center text-indigo-700 mb-6">Image Comparison Tool</h1>
+
+        <div class="mb-6 space-y-4">
+            <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                <div class="w-full">
+                    <label for="imageUpload1" class="block text-sm font-medium text-gray-700 mb-2">Upload First Image:</label>
+                    <input type="file" id="imageUpload1" accept="image/*" class="w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100" />
+                </div>
+                <div class="w-full">
+                    <label for="imageUpload2" class="block text-sm font-medium text-gray-700 mb-2">Upload Second Image:</label>
+                    <input type="file" id="imageUpload2" accept="image/*" class="w-full text-sm text-gray-500
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-md file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-indigo-50 file:text-indigo-700
+                        hover:file:bg-indigo-100" />
+                </div>
+            </div>
+            <p class="text-center text-sm text-gray-500">
+                Please upload two images to compare. For best results, use images of similar dimensions.
+            </p>
+        </div>
+
+        <div id="comparisonContainer" class="mt-8 relative" style="min-height: 200px;">
+            <!-- This is where the img-comparison-slider will be injected -->
+            <div id="placeholder" class="bg-gray-100 rounded-xl flex items-center justify-center p-8 text-gray-500 text-center" style="height: 200px;">
+                Upload images above to see the comparison.
+            </div>
+        </div>
+    </div>
+
+    <!-- img-comparison-slider Web Component CDN -->
+    <script src="https://unpkg.com/img-comparison-slider@8/dist/index.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const imageUpload1 = document.getElementById('imageUpload1');
+            const imageUpload2 = document.getElementById('imageUpload2');
+            const comparisonContainer = document.getElementById('comparisonContainer');
+            const placeholder = document.getElementById('placeholder');
+
+            let imageUrl1 = null;
+            let imageUrl2 = null;
+
+            // Function to render the comparison slider
+            function renderSlider() {
+                if (imageUrl1 && imageUrl2) {
+                    // Remove placeholder if it exists
+                    if (placeholder) {
+                        placeholder.remove();
+                    }
+
+                    // Remove existing slider to prevent duplicates on update
+                    const existingSlider = comparisonContainer.querySelector('img-comparison-slider');
+                    if (existingSlider) {
+                        existingSlider.remove();
+                    }
+
+                    // Create the new slider element
+                    const slider = document.createElement('img-comparison-slider');
+                    slider.setAttribute('class', 'rounded-xl shadow-md'); // Apply Tailwind classes
+
+                    const imgBefore = document.createElement('img');
+                    imgBefore.setAttribute('slot', 'before');
+                    imgBefore.setAttribute('src', imageUrl1);
+                    imgBefore.setAttribute('alt', 'Before Image');
+                    imgBefore.setAttribute('class', 'rounded-xl object-contain'); // Maintain aspect ratio
+
+                    const imgAfter = document.createElement('img');
+                    imgAfter.setAttribute('slot', 'after');
+                    imgAfter.setAttribute('src', imageUrl2);
+                    imgAfter.setAttribute('alt', 'After Image');
+                    imgAfter.setAttribute('class', 'rounded-xl object-contain'); // Maintain aspect ratio
+
+                    slider.appendChild(imgBefore);
+                    slider.appendChild(imgAfter);
+                    comparisonContainer.appendChild(slider);
+                } else if (!comparisonContainer.contains(placeholder)) {
+                    // If images are cleared and placeholder is missing, re-add it
+                    comparisonContainer.innerHTML = `
+                        <div id="placeholder" class="bg-gray-100 rounded-xl flex items-center justify-center p-8 text-gray-500 text-center" style="height: 200px;">
+                            Upload images above to see the comparison.
+                        </div>
+                    `;
+                }
+            }
+
+            // Event listener for the first image upload
+            imageUpload1.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        imageUrl1 = e.target.result;
+                        renderSlider();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    imageUrl1 = null; // Clear image if no file selected
+                    renderSlider(); // Re-render to update UI (e.g., show placeholder)
+                }
+            });
+
+            // Event listener for the second image upload
+            imageUpload2.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        imageUrl2 = e.target.result;
+                        renderSlider();
+                    };
+                    reader.readAsDataURL(file);
+                } else {
+                    imageUrl2 = null; // Clear image if no file selected
+                    renderSlider(); // Re-render to update UI (e.g., show placeholder)
+                }
+            });
+        });
+    </script>
+</body>
+</html>
