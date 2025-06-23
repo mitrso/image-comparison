@@ -13,7 +13,7 @@
             font-family: 'Inter', sans-serif;
             background-color: #f0f2f5;
         }
-        /* Custom styles for the image comparison slider to ensure it takes full width */
+        /* Custom styles for the image comparison slider */
         img-comparison-slider {
             width: 100%;
             height: auto; /* Allow height to adjust based on aspect ratio */
@@ -30,6 +30,14 @@
             width: 100%;
             height: auto;
         }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            max-width: 100%; /* Ensure canvas is responsive */
+            height: auto; /* Maintain aspect ratio */
+        }
     </style>
 </head>
 <body class="flex items-center justify-center min-h-screen p-4">
@@ -39,35 +47,63 @@
         <div class="mb-6 space-y-4">
             <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                 <div class="w-full">
-                    <label for="imageUpload1" class="block text-sm font-medium text-gray-700 mb-2">Upload First Image:</label>
-                    <input type="file" id="imageUpload1" accept="image/*" class="w-full text-sm text-gray-500
+                    <label for="imageUploadA" class="block text-sm font-medium text-gray-700 mb-2">Upload Image A:</label>
+                    <input type="file" id="imageUploadA" accept="image/*" class="w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-md file:border-0
                         file:text-sm file:font-semibold
-                        file:bg-indigo-50 file:text-indigo-700
-                        hover:file:bg-indigo-100" />
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100" />
                 </div>
                 <div class="w-full">
-                    <label for="imageUpload2" class="block text-sm font-medium text-gray-700 mb-2">Upload Second Image:</label>
-                    <input type="file" id="imageUpload2" accept="image/*" class="w-full text-sm text-gray-500
+                    <label for="imageUploadB" class="block text-sm font-medium text-gray-700 mb-2">Upload Image B:</label>
+                    <input type="file" id="imageUploadB" accept="image/*" class="w-full text-sm text-gray-500
                         file:mr-4 file:py-2 file:px-4
                         file:rounded-md file:border-0
                         file:text-sm file:font-semibold
-                        file:bg-indigo-50 file:text-indigo-700
-                        hover:file:bg-indigo-100" />
+                        file:bg-blue-50 file:text-blue-700
+                        hover:file:bg-blue-100" />
                 </div>
             </div>
             <p class="text-center text-sm text-gray-500">
-                Please upload two images to compare. For best results, use images of similar dimensions.
+                Upload two images to compare. For best results, use images of similar dimensions.
             </p>
+            <div class="flex justify-center mt-4 space-x-4">
+                <button id="showSliderButton" class="px-6 py-2 rounded-md border-0 text-sm font-semibold
+                    bg-indigo-500 text-white
+                    hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75">
+                    Show Slider
+                </button>
+                <button id="highlightDifferencesButton" class="px-6 py-2 rounded-md border-0 text-sm font-semibold
+                    bg-red-500 text-white
+                    hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75">
+                    Highlight Differences
+                </button>
+                <button id="resetButton" class="px-6 py-2 rounded-md border-0 text-sm font-semibold
+                    bg-gray-200 text-gray-800
+                    hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">
+                    Reset
+                </button>
+            </div>
         </div>
 
         <div id="comparisonContainer" class="mt-8 relative" style="min-height: 200px;">
-            <!-- This is where the img-comparison-slider will be injected -->
-            <div id="placeholder" class="bg-gray-100 rounded-xl flex items-center justify-center p-8 text-gray-500 text-center" style="height: 200px;">
-                Upload images above to see the comparison.
+            <!-- Placeholder for initial state -->
+            <div id="initialPlaceholder" class="bg-gray-100 rounded-xl flex items-center justify-center p-8 text-gray-500 text-center" style="height: 200px; width: 100%;">
+                Upload images above to choose a comparison mode.
+            </div>
+
+            <!-- Slider comparison container -->
+            <div id="sliderView" class="hidden">
+                <!-- img-comparison-slider will be injected here -->
+            </div>
+
+            <!-- Pixel difference canvas container -->
+            <div id="diffView" class="hidden flex justify-center items-center">
+                <canvas id="diffCanvas"></canvas>
             </div>
         </div>
+        <div id="messageBox" class="mt-4 p-3 bg-yellow-100 text-yellow-800 rounded-md hidden"></div>
     </div>
 
     <!-- img-comparison-slider Web Component CDN -->
@@ -75,24 +111,80 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const imageUpload1 = document.getElementById('imageUpload1');
-            const imageUpload2 = document.getElementById('imageUpload2');
-            const comparisonContainer = document.getElementById('comparisonContainer');
-            const placeholder = document.getElementById('placeholder');
+            const imageUploadA = document.getElementById('imageUploadA');
+            const imageUploadB = document.getElementById('imageUploadB');
+            const showSliderButton = document.getElementById('showSliderButton');
+            const highlightDifferencesButton = document.getElementById('highlightDifferencesButton');
+            const resetButton = document.getElementById('resetButton');
+            const initialPlaceholder = document.getElementById('initialPlaceholder');
+            const sliderView = document.getElementById('sliderView');
+            const diffView = document.getElementById('diffView');
+            const diffCanvas = document.getElementById('diffCanvas');
+            const ctx = diffCanvas.getContext('2d');
+            const messageBox = document.getElementById('messageBox');
 
-            let imageUrl1 = null;
-            let imageUrl2 = null;
+            let imageUrlA = null;
+            let imageUrlB = null;
+            let imgA = new Image(); // For pixel comparison
+            let imgB = new Image(); // For pixel comparison
+            let imgALoaded = false;
+            let imgBLoaded = false;
 
-            // Function to render the comparison slider
+            /**
+             * Displays a message to the user in a dedicated message box.
+             * @param {string} message The message to display.
+             * @param {string} type The type of message (e.g., 'error', 'info', 'success').
+             */
+            function showMessage(message, type = 'info') {
+                messageBox.textContent = message;
+                messageBox.className = `mt-4 p-3 rounded-md`;
+                messageBox.classList.remove('hidden');
+
+                if (type === 'error') {
+                    messageBox.classList.add('bg-red-100', 'text-red-800');
+                } else if (type === 'info') {
+                    messageBox.classList.add('bg-blue-100', 'text-blue-800');
+                } else if (type === 'success') {
+                    messageBox.classList.add('bg-green-100', 'text-green-800');
+                } else {
+                    // Default for 'warning' or other types
+                    messageBox.classList.add('bg-yellow-100', 'text-yellow-800');
+                }
+            }
+
+            /**
+             * Hides the message box.
+             */
+            function hideMessageBox() {
+                messageBox.classList.add('hidden');
+                messageBox.textContent = '';
+            }
+
+            /**
+             * Controls which view (slider, diff, or placeholder) is visible.
+             * @param {'initial'|'slider'|'diff'} viewType
+             */
+            function displayView(viewType) {
+                initialPlaceholder.classList.add('hidden');
+                sliderView.classList.add('hidden');
+                diffView.classList.add('hidden');
+
+                if (viewType === 'initial') {
+                    initialPlaceholder.classList.remove('hidden');
+                } else if (viewType === 'slider') {
+                    sliderView.classList.remove('hidden');
+                } else if (viewType === 'diff') {
+                    diffView.classList.remove('hidden');
+                }
+            }
+
+            /**
+             * Renders the image comparison slider.
+             */
             function renderSlider() {
-                if (imageUrl1 && imageUrl2) {
-                    // Remove placeholder if it exists
-                    if (placeholder) {
-                        placeholder.remove();
-                    }
-
+                if (imageUrlA && imageUrlB) {
                     // Remove existing slider to prevent duplicates on update
-                    const existingSlider = comparisonContainer.querySelector('img-comparison-slider');
+                    const existingSlider = sliderView.querySelector('img-comparison-slider');
                     if (existingSlider) {
                         existingSlider.remove();
                     }
@@ -103,60 +195,192 @@
 
                     const imgBefore = document.createElement('img');
                     imgBefore.setAttribute('slot', 'before');
-                    imgBefore.setAttribute('src', imageUrl1);
+                    imgBefore.setAttribute('src', imageUrlA);
                     imgBefore.setAttribute('alt', 'Before Image');
                     imgBefore.setAttribute('class', 'rounded-xl object-contain'); // Maintain aspect ratio
 
                     const imgAfter = document.createElement('img');
                     imgAfter.setAttribute('slot', 'after');
-                    imgAfter.setAttribute('src', imageUrl2);
+                    imgAfter.setAttribute('src', imageUrlB);
                     imgAfter.setAttribute('alt', 'After Image');
                     imgAfter.setAttribute('class', 'rounded-xl object-contain'); // Maintain aspect ratio
 
                     slider.appendChild(imgBefore);
                     slider.appendChild(imgAfter);
-                    comparisonContainer.appendChild(slider);
-                } else if (!comparisonContainer.contains(placeholder)) {
-                    // If images are cleared and placeholder is missing, re-add it
-                    comparisonContainer.innerHTML = `
-                        <div id="placeholder" class="bg-gray-100 rounded-xl flex items-center justify-center p-8 text-gray-500 text-center" style="height: 200px;">
-                            Upload images above to see the comparison.
-                        </div>
-                    `;
+                    sliderView.appendChild(slider);
+
+                    displayView('slider');
+                } else {
+                    showMessage('Please upload both images to use the slider.', 'warning');
+                    displayView('initial');
                 }
             }
 
-            // Event listener for the first image upload
-            imageUpload1.addEventListener('change', (event) => {
-                const file = event.target.files[0];
+            /**
+             * Renders the canvas with highlighted pixel differences.
+             */
+            function renderDifferenceCanvas() {
+                if (!imgALoaded || !imgBLoaded || !imgA.src || !imgB.src) {
+                    showMessage('Please upload both images before highlighting differences.', 'warning');
+                    displayView('initial');
+                    return;
+                }
+
+                // Determine the target dimensions for the canvas
+                const maxWidth = Math.max(imgA.width, imgB.width);
+                const maxHeight = Math.max(imgA.height, imgB.height);
+
+                // Set canvas dimensions
+                diffCanvas.width = maxWidth;
+                diffCanvas.height = maxHeight;
+
+                // Draw Image A first onto the diffCanvas
+                ctx.clearRect(0, 0, diffCanvas.width, diffCanvas.height); // Clear previous content
+                ctx.drawImage(imgA, 0, 0, maxWidth, maxHeight);
+
+                // Temporarily draw Image B to get its pixel data
+                const tempCanvasB = document.createElement('canvas');
+                const tempCtxB = tempCanvasB.getContext('2d');
+                tempCanvasB.width = maxWidth;
+                tempCanvasB.height = maxHeight;
+                tempCtxB.drawImage(imgB, 0, 0, maxWidth, maxHeight);
+
+                const imageDataA = ctx.getImageData(0, 0, maxWidth, maxHeight); // Get data from imgA (now on diffCanvas)
+                const imageDataB = tempCtxB.getImageData(0, 0, maxWidth, maxHeight);
+
+                const dataA = imageDataA.data;
+                const dataB = imageDataB.data;
+                const outputData = imageDataA.data; // We will modify this array directly
+
+                let differencesFound = 0;
+                const tolerance = 5; // Tolerance for pixel difference (0-255)
+
+                for (let i = 0; i < dataA.length; i += 4) {
+                    const rA = dataA[i];
+                    const gA = dataA[i + 1];
+                    const bA = dataA[i + 2];
+                    const aA = dataA[i + 3];
+
+                    const rB = dataB[i];
+                    const gB = dataB[i + 1];
+                    const bB = dataB[i + 2];
+                    const aB = dataB[i + 3];
+
+                    // Calculate color differences
+                    const diffR = Math.abs(rA - rB);
+                    const diffG = Math.abs(gA - gB);
+                    const diffB = Math.abs(bA - bB);
+                    const diffA = Math.abs(aA - aB);
+
+                    // If any color component or alpha differs beyond tolerance, mark as red
+                    if (diffR > tolerance || diffG > tolerance || diffB > tolerance || diffA > tolerance) {
+                        outputData[i] = 255;     // Red
+                        outputData[i + 1] = 0;   // Green
+                        outputData[i + 2] = 0;   // Blue
+                        outputData[i + 3] = 255; // Alpha (fully opaque)
+                        differencesFound++;
+                    }
+                    // For similar pixels, they retain the color from the original Image A
+                }
+
+                ctx.putImageData(imageDataA, 0, 0); // Put the modified imageData back onto the canvas
+
+                displayView('diff');
+
+                if (differencesFound > 0) {
+                    showMessage(`Found ${differencesFound} differing pixels, highlighted in red.`, 'success');
+                } else {
+                    showMessage('No significant pixel differences found.', 'info');
+                }
+            }
+
+            /**
+             * Resets the tool to its initial state.
+             */
+            function resetTool() {
+                imageUrlA = null;
+                imageUrlB = null;
+                imageUploadA.value = '';
+                imageUploadB.value = '';
+                imgA.src = '';
+                imgB.src = '';
+                imgALoaded = false;
+                imgBLoaded = false;
+
+                // Clear canvas content
+                ctx.clearRect(0, 0, diffCanvas.width, diffCanvas.height);
+
+                // Remove existing slider if any
+                const existingSlider = sliderView.querySelector('img-comparison-slider');
+                if (existingSlider) {
+                    existingSlider.remove();
+                }
+
+                displayView('initial'); // Show initial placeholder
+                hideMessageBox(); // Hide messages
+            }
+
+            /**
+             * Reads an image file and sets the src for both an Image object (for pixel diff)
+             * and a URL variable (for slider).
+             * @param {File} file The image file to read.
+             * @param {Image} imgElement The Image object to load the data into.
+             * @param {string} urlVarName The name of the URL variable (e.g., 'imageUrlA').
+             * @param {function(boolean): void} loadedCallback A callback function to update loading status.
+             */
+            function handleImageUpload(file, imgElement, urlVarName, loadedCallback) {
                 if (file) {
                     const reader = new FileReader();
                     reader.onload = (e) => {
-                        imageUrl1 = e.target.result;
-                        renderSlider();
+                        if (urlVarName === 'imageUrlA') imageUrlA = e.target.result;
+                        if (urlVarName === 'imageUrlB') imageUrlB = e.target.result;
+                        imgElement.src = e.target.result;
+                    };
+                    imgElement.onload = () => {
+                        loadedCallback(true); // Image loaded successfully
+                        hideMessageBox(); // Clear messages on successful load
+                        // If both images are loaded, show the slider by default
+                        if (imgALoaded && imgBLoaded) {
+                            renderSlider();
+                        }
+                    };
+                    imgElement.onerror = () => {
+                        loadedCallback(false); // Image failed to load
+                        showMessage('Error loading image. Please ensure it is a valid image file.', 'error');
+                        // Reset images if there's an error to avoid broken state
+                        if (urlVarName === 'imageUrlA') imageUrlA = null;
+                        if (urlVarName === 'imageUrlB') imageUrlB = null;
                     };
                     reader.readAsDataURL(file);
                 } else {
-                    imageUrl1 = null; // Clear image if no file selected
-                    renderSlider(); // Re-render to update UI (e.g., show placeholder)
+                    imgElement.src = ''; // Clear image source
+                    if (urlVarName === 'imageUrlA') imageUrlA = null;
+                    if (urlVarName === 'imageUrlB') imageUrlB = null;
+                    loadedCallback(false); // No file selected
+                    displayView('initial'); // Go back to initial placeholder if an image is removed
                 }
+            }
+
+            // Event listeners for file uploads
+            imageUploadA.addEventListener('change', (event) => {
+                handleImageUpload(event.target.files[0], imgA, 'imageUrlA', (loaded) => {
+                    imgALoaded = loaded;
+                });
             });
 
-            // Event listener for the second image upload
-            imageUpload2.addEventListener('change', (event) => {
-                const file = event.target.files[0];
-                if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        imageUrl2 = e.target.result;
-                        renderSlider();
-                    };
-                    reader.readAsDataURL(file);
-                } else {
-                    imageUrl2 = null; // Clear image if no file selected
-                    renderSlider(); // Re-render to update UI (e.g., show placeholder)
-                }
+            imageUploadB.addEventListener('change', (event) => {
+                handleImageUpload(event.target.files[0], imgB, 'imageUrlB', (loaded) => {
+                    imgBLoaded = loaded;
+                });
             });
+
+            // Event listeners for action buttons
+            showSliderButton.addEventListener('click', renderSlider);
+            highlightDifferencesButton.addEventListener('click', renderDifferenceCanvas);
+            resetButton.addEventListener('click', resetTool);
+
+            // Initial state: show placeholder
+            displayView('initial');
         });
     </script>
 </body>
